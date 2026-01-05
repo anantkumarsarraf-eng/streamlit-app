@@ -6,32 +6,32 @@ import time
 
 # ---------------- CONFIG ----------------
 st.set_page_config(
-    page_title="Travel Recommendation Chatbot",
+    page_title="Smart Study Planner",
     layout="wide"
 )
 
 HF_TOKEN = st.secrets["HF_API_TOKEN"]
 
-BLIP_API = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
-LLM_API = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+VISION_API = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
+LLM_API = "https://api-inference.huggingface.co/models/google/gemma-2b-it"
 
 HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 # ---------------- SESSION STATE ----------------
-if "landmark" not in st.session_state:
-    st.session_state.landmark = ""
+if "notes_summary" not in st.session_state:
+    st.session_state.notes_summary = ""
 
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
-# ---------------- SAFE API CALLS ----------------
-def image_to_landmark(image):
+# ---------------- FUNCTIONS ----------------
+def analyze_notes(image):
     img_bytes = io.BytesIO()
     image.save(img_bytes, format="PNG")
 
-    for _ in range(3):  # retry 3 times
+    for _ in range(3):
         response = requests.post(
-            BLIP_API,
+            VISION_API,
             headers=HEADERS,
             data=img_bytes.getvalue(),
             timeout=60
@@ -41,19 +41,22 @@ def image_to_landmark(image):
             try:
                 return response.json()[0]["generated_text"]
             except:
-                return "Landmark detected but description unavailable."
+                return "Notes detected but could not extract text."
 
         time.sleep(5)
 
-    return "Image model is busy. Please try again after some time."
+    return "Notes image model is currently busy. Please try again."
 
-def ask_llm(prompt):
+def generate_study_plan(prompt):
     payload = {
         "inputs": prompt,
-        "parameters": {"max_new_tokens": 300}
+        "parameters": {
+            "max_new_tokens": 350,
+            "temperature": 0.7
+        }
     }
 
-    for _ in range(3):  # retry 3 times
+    for _ in range(3):
         response = requests.post(
             LLM_API,
             headers=HEADERS,
@@ -69,52 +72,54 @@ def ask_llm(prompt):
 
         time.sleep(5)
 
-    return "Language model is currently busy. Please try again later."
+    return "Study planner model is busy. Please try again later."
 
 # ---------------- UI ----------------
-st.title("Travel Recommendation Chatbot")
-st.caption("Transformer-based Multimodal AI (VLM + LLM)")
+st.title("Smart Study Planner")
+st.caption("Transformer-based Multimodal AI (Vision + Language)")
 
 col1, col2 = st.columns([1, 2])
 
 # ---------------- LEFT PANEL ----------------
 with col1:
-    st.subheader("Upload Landmark Image")
+    st.subheader("Upload Notes Image")
     image_file = st.file_uploader(
-        "Upload image",
+        "Upload handwritten or printed notes",
         type=["jpg", "jpeg", "png"]
     )
 
     if image_file:
         image = Image.open(image_file)
-        st.image(image, caption="Uploaded Image", width=280)
+        st.image(image, caption="Uploaded Notes", width=280)
 
-        if st.button("Identify Landmark"):
-            with st.spinner("Analyzing image..."):
-                st.session_state.landmark = image_to_landmark(image)
-                st.success("Process completed")
+        if st.button("Analyze Notes"):
+            with st.spinner("Analyzing notes..."):
+                st.session_state.notes_summary = analyze_notes(image)
+                st.success("Notes analyzed")
 
 # ---------------- RIGHT PANEL ----------------
 with col2:
-    st.subheader("Travel Chatbot")
+    st.subheader("Study Planner Assistant")
 
-    if st.session_state.landmark:
-        st.markdown(f"**Identified Landmark:** {st.session_state.landmark}")
+    if st.session_state.notes_summary:
+        st.markdown(f"**Extracted Notes Summary:** {st.session_state.notes_summary}")
 
     for role, msg in st.session_state.chat:
         with st.chat_message(role):
             st.write(msg)
 
-    user_input = st.chat_input("Ask about travel, budget, best time, attractions")
+    user_input = st.chat_input(
+        "Ask for study plan, goals, revision schedule, or exam strategy"
+    )
 
     if user_input:
         st.session_state.chat.append(("user", user_input))
 
         context = f"""
-You are a professional travel guide.
+You are an intelligent academic study planner.
 
-Landmark:
-{st.session_state.landmark}
+Notes Summary:
+{st.session_state.notes_summary}
 
 Conversation:
 """
@@ -123,8 +128,8 @@ Conversation:
             context += f"{r}: {m}\n"
 
         with st.chat_message("assistant"):
-            with st.spinner("Generating response..."):
-                answer = ask_llm(context)
+            with st.spinner("Generating study plan..."):
+                answer = generate_study_plan(context)
                 st.write(answer)
 
         st.session_state.chat.append(("assistant", answer))
