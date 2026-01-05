@@ -2,18 +2,20 @@ import streamlit as st
 import requests
 from PIL import Image
 import io
+import time
 
 # ---------------- CONFIG ----------------
-st.set_page_config("Travel Recommendation Chatbot", layout="wide")
+st.set_page_config(
+    page_title="Travel Recommendation Chatbot",
+    layout="wide"
+)
 
 HF_TOKEN = st.secrets["HF_API_TOKEN"]
 
 BLIP_API = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
 LLM_API = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
 
-HEADERS = {
-    "Authorization": f"Bearer {HF_TOKEN}"
-}
+HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 # ---------------- SESSION STATE ----------------
 if "landmark" not in st.session_state:
@@ -22,12 +24,12 @@ if "landmark" not in st.session_state:
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
-# ---------------- FUNCTIONS ----------------
+# ---------------- SAFE API CALLS ----------------
 def image_to_landmark(image):
     img_bytes = io.BytesIO()
     image.save(img_bytes, format="PNG")
 
-    try:
+    for _ in range(3):  # retry 3 times
         response = requests.post(
             BLIP_API,
             headers=HEADERS,
@@ -35,15 +37,15 @@ def image_to_landmark(image):
             timeout=60
         )
 
-        if response.status_code != 200:
-            return "Image model is currently unavailable. Please try again."
+        if response.status_code == 200:
+            try:
+                return response.json()[0]["generated_text"]
+            except:
+                return "Landmark detected but description unavailable."
 
-        data = response.json()
-        return data[0]["generated_text"]
+        time.sleep(5)
 
-    except Exception:
-        return "Failed to identify landmark. Please try another image."
-
+    return "Image model is busy. Please try again after some time."
 
 def ask_llm(prompt):
     payload = {
@@ -51,7 +53,7 @@ def ask_llm(prompt):
         "parameters": {"max_new_tokens": 300}
     }
 
-    try:
+    for _ in range(3):  # retry 3 times
         response = requests.post(
             LLM_API,
             headers=HEADERS,
@@ -59,14 +61,15 @@ def ask_llm(prompt):
             timeout=60
         )
 
-        if response.status_code != 200:
-            return "Language model is busy. Please try again."
+        if response.status_code == 200:
+            try:
+                return response.json()[0]["generated_text"]
+            except:
+                return "Response generated but could not be parsed."
 
-        data = response.json()
-        return data[0]["generated_text"]
+        time.sleep(5)
 
-    except Exception:
-        return "Failed to generate response. Please retry."
+    return "Language model is currently busy. Please try again later."
 
 # ---------------- UI ----------------
 st.title("Travel Recommendation Chatbot")
@@ -78,7 +81,7 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.subheader("Upload Landmark Image")
     image_file = st.file_uploader(
-        "Upload Image",
+        "Upload image",
         type=["jpg", "jpeg", "png"]
     )
 
@@ -88,9 +91,8 @@ with col1:
 
         if st.button("Identify Landmark"):
             with st.spinner("Analyzing image..."):
-                landmark = image_to_landmark(image)
-                st.session_state.landmark = landmark
-                st.success("Processing complete")
+                st.session_state.landmark = image_to_landmark(image)
+                st.success("Process completed")
 
 # ---------------- RIGHT PANEL ----------------
 with col2:
@@ -103,9 +105,7 @@ with col2:
         with st.chat_message(role):
             st.write(msg)
 
-    user_input = st.chat_input(
-        "Ask about travel, budget, best time, attractions..."
-    )
+    user_input = st.chat_input("Ask about travel, budget, best time, attractions")
 
     if user_input:
         st.session_state.chat.append(("user", user_input))
@@ -130,4 +130,4 @@ Conversation:
         st.session_state.chat.append(("assistant", answer))
 
 st.divider()
-st.caption("MACS AIML - Multimodal Transformer Project")
+st.caption("MACS AIML • Multimodal Transformer Project")
