@@ -6,7 +6,7 @@ import time
 
 # ---------------- CONFIG ----------------
 st.set_page_config(
-    page_title="Smart Study Planner",
+    page_title="Travel Recommendation Chatbot",
     layout="wide"
 )
 
@@ -18,14 +18,14 @@ LLM_API = "https://api-inference.huggingface.co/models/google/gemma-2b-it"
 HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 # ---------------- SESSION STATE ----------------
-if "notes_summary" not in st.session_state:
-    st.session_state.notes_summary = ""
+if "landmark" not in st.session_state:
+    st.session_state.landmark = ""
 
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
 # ---------------- FUNCTIONS ----------------
-def analyze_notes(image):
+def identify_landmark(image):
     img_bytes = io.BytesIO()
     image.save(img_bytes, format="PNG")
 
@@ -41,13 +41,13 @@ def analyze_notes(image):
             try:
                 return response.json()[0]["generated_text"]
             except:
-                return "Notes detected but could not extract text."
+                return "Landmark detected but description unavailable."
 
         time.sleep(5)
 
-    return "Notes image model is currently busy. Please try again."
+    return "Landmark model is currently busy. Please try again later."
 
-def generate_study_plan(prompt):
+def generate_travel_guide(prompt):
     payload = {
         "inputs": prompt,
         "parameters": {
@@ -72,54 +72,54 @@ def generate_study_plan(prompt):
 
         time.sleep(5)
 
-    return "Study planner model is busy. Please try again later."
+    return "Travel recommendation model is busy. Please try again later."
 
 # ---------------- UI ----------------
-st.title("Smart Study Planner")
+st.title("Travel Recommendation Chatbot")
 st.caption("Transformer-based Multimodal AI (Vision + Language)")
 
 col1, col2 = st.columns([1, 2])
 
 # ---------------- LEFT PANEL ----------------
 with col1:
-    st.subheader("Upload Notes Image")
+    st.subheader("Upload Landmark Image")
     image_file = st.file_uploader(
-        "Upload handwritten or printed notes",
+        "Upload image of a landmark",
         type=["jpg", "jpeg", "png"]
     )
 
     if image_file:
         image = Image.open(image_file)
-        st.image(image, caption="Uploaded Notes", width=280)
+        st.image(image, caption="Uploaded Landmark Image", width=280)
 
-        if st.button("Analyze Notes"):
-            with st.spinner("Analyzing notes..."):
-                st.session_state.notes_summary = analyze_notes(image)
-                st.success("Notes analyzed")
+        if st.button("Identify Landmark"):
+            with st.spinner("Identifying landmark..."):
+                st.session_state.landmark = identify_landmark(image)
+                st.success("Landmark identified")
 
 # ---------------- RIGHT PANEL ----------------
 with col2:
-    st.subheader("Study Planner Assistant")
+    st.subheader("Travel Chatbot")
 
-    if st.session_state.notes_summary:
-        st.markdown(f"**Extracted Notes Summary:** {st.session_state.notes_summary}")
+    if st.session_state.landmark:
+        st.markdown(f"**Identified Landmark:** {st.session_state.landmark}")
 
     for role, msg in st.session_state.chat:
         with st.chat_message(role):
             st.write(msg)
 
     user_input = st.chat_input(
-        "Ask for study plan, goals, revision schedule, or exam strategy"
+        "Ask about travel guide, best time to visit, budget, or attractions"
     )
 
     if user_input:
         st.session_state.chat.append(("user", user_input))
 
         context = f"""
-You are an intelligent academic study planner.
+You are a professional travel guide.
 
-Notes Summary:
-{st.session_state.notes_summary}
+Landmark:
+{st.session_state.landmark}
 
 Conversation:
 """
@@ -128,8 +128,8 @@ Conversation:
             context += f"{r}: {m}\n"
 
         with st.chat_message("assistant"):
-            with st.spinner("Generating study plan..."):
-                answer = generate_study_plan(context)
+            with st.spinner("Generating travel recommendation..."):
+                answer = generate_travel_guide(context)
                 st.write(answer)
 
         st.session_state.chat.append(("assistant", answer))
